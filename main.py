@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QListWidget, QMenuBar, QFileDialog, QMessageBox
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QListWidget, QMenuBar, QFileDialog, QMessageBox, QLabel, QLCDNumber
 from PyQt6.QtCore import Qt
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction
@@ -27,8 +27,8 @@ class VideoApp(QWidget):
         elif sys.platform == "darwin":
             self.player.set_nsobject(int(self.video_frame.winId()))
 
-
         self.timeline = timeline.TimelineWidget()
+
         # Create and add menu bar manually
         menubar = QMenuBar()
         file_menu = menubar.addMenu("File")
@@ -45,30 +45,49 @@ class VideoApp(QWidget):
         save_action.triggered.connect(self.save)
         file_menu.addAction(save_action)
 
+        self.markers = {}
+        self.marker_list = QListWidget()
+
+        # create back button
         self.back_btn = QPushButton("<<")
         self.back_btn.clicked.connect(self.back)
+
+        # create play button
         self.play_btn = QPushButton("Play/Pause")
         self.play_btn.clicked.connect(self.toggle_play)
 
-       
-        
-        
-        # self.slider = QSlider(Qt.Orientation.Horizontal)
-        # self.slider.setRange(0, 1000)
-        # self.slider.sliderMoved.connect(self.set_position)
-
-
-        self.markers = {}
+        # create marker buttons
         self.marker_buttons = []
-        self.marker_list = QListWidget()
         for marker in timeline.MARKER_TYPES.keys():
             button = QPushButton(marker)
             button.clicked.connect(lambda checked=False, n=marker: self.add_marker(n))
             self.marker_buttons.append(button)
 
+        # create export button
+        self.export_btn = QPushButton("Export")
+        self.export_btn.clicked.connect(self.export)
+
+        # create score tracker
+        self.home_score = QLabel("0")
+        self.home_score.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.away_score = QLabel("0")
+
          # --- Layout setup ---
         main_layout = QVBoxLayout(self)
         main_layout.setMenuBar(menubar)
+
+        score_label_layout = QHBoxLayout()
+        home = QLabel("Home")
+        home.setAlignment(Qt.AlignmentFlag.AlignRight)
+        score_label_layout.addWidget(home)
+        score_label_layout.addWidget(QLabel("Away"))
+
+        score_layout = QHBoxLayout()
+        score_layout.addWidget(self.home_score)
+        score_layout.addWidget(self.away_score)
+
+        main_layout.addLayout(score_label_layout)
+        main_layout.addLayout(score_layout)
 
         # top: video display
         main_layout.addWidget(self.video_frame, stretch=3)
@@ -149,6 +168,9 @@ class VideoApp(QWidget):
         current_time = self.player.get_time()  # milliseconds
         seek_time = max(0, current_time - 5000)
         self.player.set_time(seek_time)
+    
+    def export(self):
+        pass
     def set_timeline(self):
         
         self.timeline.set_duration(1)  # default to avoid div by zero
@@ -167,7 +189,19 @@ class VideoApp(QWidget):
     def update_timeline(self):
         pos = self.player.get_time()         # Current time in ms
         self.timeline.set_position(pos)
-
+        self.update_score()
+    def update_score(self):
+        pos = self.player.get_time()
+        home = 0
+        away = 0
+        for t, name in self.markers.items():
+            if t < pos:
+                if name == "Home point":
+                    home += 1
+                elif name == "Away point":
+                    away += 1
+        self.home_score.setText(str(home))
+        self.away_score.setText(str(away))
 
     def set_position(self, value):
         """Jump to a position in the video when slider is moved."""
