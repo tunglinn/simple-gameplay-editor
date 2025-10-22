@@ -6,6 +6,7 @@ from PyQt6.QtGui import QAction
 import vlc
 import timeline
 import json
+from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip
 
 class VideoApp(QWidget):
     def __init__(self):
@@ -105,6 +106,8 @@ class VideoApp(QWidget):
 
         # bottom: marker list
         main_layout.addWidget(self.marker_list, stretch=1)
+
+        main_layout.addWidget(self.export_btn)
         
         # Timer to update slider
         self.timer = QTimer(self)
@@ -115,19 +118,20 @@ class VideoApp(QWidget):
     
     def open_file_dialog(self):
         # Open file picker dialog
-        file_path, _ = QFileDialog.getOpenFileName(
+        self.video_path, _ = QFileDialog.getOpenFileName(
             self,
             "Open File",
             "",  # initial directory
             "All Files (*);;Text Files (*.txt);;Video Files (*.mp4 *.avi)"
         )
-        if file_path:
-            print("Selected file:", file_path)
+        if self.video_path:
+            print("Selected file:", self.video_path)
         
-        media = self.instance.media_new(file_path)
+        media = self.instance.media_new(self.video_path)
         self.player.set_media(media)
-        self.set_timeline()
+        self.set_timeline_and_fps()
         self.toggle_play()
+    
 
     def toggle_play(self):
         if self.player.is_playing():
@@ -170,18 +174,59 @@ class VideoApp(QWidget):
         self.player.set_time(seek_time)
     
     def export(self):
-        pass
-    def set_timeline(self):
+        clip_ranges = []
+        current_start = None
+        for t, name in sorted(self.markers.items()):
+            t = round(t/1000, 1)
+            print(f"timestamp: {t} name: {name}")
+            if name == "Serve":
+                current_start = t
+            else:
+                if current_start: 
+                    clip_ranges.append((current_start, t, name))
+                    current_start = None
+                else:
+                    print(f"{name} at timestamp {t} doesn't have start serve.")
+                    return
+
+        
+        video = VideoFileClip(self.video_path)
+        print(f'subclips: {clip_ranges}')
+        subclips = []
+        home = 0
+        away = 0
+        for start, end, name in clip_ranges:
+            clip = video.subclipped(start, end)
+            if "Home" in name:
+                home += 1
+            elif "Away" in name:
+                away += 1
+            # Create text overlay
+            score_text = TextClip(text=f"Home: {home}  Away: {away}", 
+                                  font_size=40, color='white', 
+                                  duration=clip.duration,
+                                  margin=(10,10), bg_color="black")
+            score_text = score_text.with_position(("center", "top"))
+            # Combine the video and text
+            annotated_clip = CompositeVideoClip([clip, score_text])
+            subclips.append(annotated_clip)
+        final = concatenate_videoclips(subclips)
+        final.write_videofile("output.mp4")
+        video.close()
+    
+    def set_timeline_and_fps(self):
         
         self.timeline.set_duration(1)  # default to avoid div by zero
         self.duration_timer = QTimer(self)
         self.duration_timer.setInterval(100)  # check every 100ms
         self.duration_timer.timeout.connect(self.check_duration)
         self.duration_timer.start()
+
     def check_duration(self):
         dur = self.player.get_length()
         if dur > 0:
             self.timeline.set_duration(dur)
+            self.fps = self.player.get_fps()
             self.duration_timer.stop()  # stop polling
 
     def init_duration(self):
@@ -213,6 +258,7 @@ class VideoApp(QWidget):
         t = self.player.get_time()
         self.markers[t] = name
         self.marker_list.addItem(f"{name} at {t/1000:.2f}s")
+
         self.timeline.set_markers(self.markers)
     def closeEvent(self, event):
         # Show a confirmation dialog
