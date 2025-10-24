@@ -211,7 +211,7 @@ class VideoApp(QWidget):
             annotated_clip = CompositeVideoClip([clip, score_text])
             subclips.append(annotated_clip)
         final = concatenate_videoclips(subclips)
-        final.write_videofile("output.mp4")
+        final.write_videofile("output.mp4", fps=24, codec='libx264', threads=4)
         video.close()
     
     def set_timeline_and_fps(self):
