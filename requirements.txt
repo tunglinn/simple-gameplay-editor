@@ -1,5 +1,4 @@
 moviepy==2.2.1
 PyQt6==6.10.0
-PyQt6_sip==13.8.0
 pyqt6_sip==13.10.2
 python_vlc==3.0.21203
