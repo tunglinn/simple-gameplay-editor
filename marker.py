@@ -8,6 +8,6 @@ class Marker(QListWidgetItem):
         HOME_PT = "Home point"
         AWAY_PT = "Away point"
     def __init__(self, name:str, timestamp: float):
-        super().__init__(f"{name} at {timestamp}")
+        super().__init__(f"{name.value} at {round(timestamp/1000, 2)}")
         self.marker_type = name
         self.timestamp = timestamp

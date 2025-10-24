@@ -67,6 +67,10 @@ class VideoApp(QWidget):
             button = QPushButton(marker.value)
             button.clicked.connect(lambda checked=False, n=marker: self.add_marker(n))
             self.marker_buttons.append(button)
+        
+        # create delete marker button
+        self.delete_btn = QPushButton("Delete Selected")
+        self.delete_btn.clicked.connect(self.delete_selected_markers)
 
         # create export button
         self.export_btn = QPushButton("Export")
@@ -107,6 +111,7 @@ class VideoApp(QWidget):
         button_layout.addWidget(self.play_btn)
         for button in self.marker_buttons:
             button_layout.addWidget(button)
+        button_layout.addWidget(self.delete_btn)
         main_layout.addLayout(button_layout)
 
         # below: slider
@@ -146,6 +151,11 @@ class VideoApp(QWidget):
             self.player.pause()
         else:
             self.player.play()
+    def marker_hook(self, obj):
+        for k, v in obj.items():
+            if isinstance(v, str) and v in Marker.MarkerType._value2member_map_:
+                obj[k] = Marker.MarkerType(v)
+        return obj
     def load_markers(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -157,14 +167,13 @@ class VideoApp(QWidget):
             return
 
         with open(file_path, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
+            loaded = json.load(f, object_hook=self.marker_hook)
             self.markers = {int(k): v for k, v in loaded.items()}
-            print(f"markers: {self.markers}")
         print(f"Loaded {len(self.markers)} items from {file_path}")
         self.timeline.set_markers(self.markers)
         self.marker_list.clear()
         for t, name in self.markers.items():
-            self.marker_list.addItem(Marker(name, round(t/1000, 2)))
+            self.marker_list.addItem(Marker(name, t))
     def save(self):
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Save File", "", "JSON Files (*.json);;All Files (*)"
@@ -265,11 +274,25 @@ class VideoApp(QWidget):
     def add_marker(self, name):
         t = self.player.get_time()
         self.markers[t] = name
-        self.marker_list.addItem(Marker(name, round(t/1000, 2)))
+        self.marker_list.addItem(Marker(name, t))
 
         self.timeline.set_markers(self.markers)
-    def select_marker(self, item):
-        print(f"Move to marker: {item.text()}")
+    def select_marker(self, marker):
+        print(f"Move to marker: {marker.text()}")
+        self.player.set_time(marker.timestamp)
+    
+    def delete_selected_markers(self):
+        selected_markers = self.marker_list.selectedItems()
+
+        if not selected_markers:
+            print("No markers selected to delete.")
+            return
+
+        for marker in selected_markers:
+            row = self.marker_list.row(marker)
+            self.marker_list.takeItem(row)
+            del marker
+
     def closeEvent(self, event):
         # Show a confirmation dialog
         reply = QMessageBox.question(
