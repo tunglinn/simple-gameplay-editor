@@ -63,7 +63,6 @@ class VideoApp(QWidget):
         # create marker buttons
         self.marker_buttons = []
         for marker in Marker.MarkerType:
-            print(f"marker: {marker}")
             button = QPushButton(marker.value)
             button.clicked.connect(lambda checked=False, n=marker: self.add_marker(n))
             self.marker_buttons.append(button)
@@ -127,7 +126,6 @@ class VideoApp(QWidget):
         self.timer.setInterval(100)  # every 100 ms
         self.timer.timeout.connect(self.update_timeline)
         self.timer.start()
-        QTimer.singleShot(100, self.open_file_dialog)
     
     def open_file_dialog(self):
         # Open file picker dialog
@@ -195,7 +193,6 @@ class VideoApp(QWidget):
         current_start = None
         for t, name in sorted(self.markers.items()):
             t = round(t/1000, 1)
-            print(f"timestamp: {t} name: {name}")
             if name == "Serve":
                 current_start = t
             else:
@@ -307,8 +304,8 @@ class VideoApp(QWidget):
         else:
             event.ignore()  # Ignore the close request
 
-
-app = QApplication(sys.argv)
-window = VideoApp()
-window.show()
-sys.exit(app.exec())
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = VideoApp()
+    window.show()
+    sys.exit(app.exec())
