@@ -7,6 +7,7 @@ import vlc
 import timeline
 import json
 from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip
+from marker import Marker
 
 class VideoApp(QWidget):
     def __init__(self):
@@ -46,8 +47,10 @@ class VideoApp(QWidget):
         save_action.triggered.connect(self.save)
         file_menu.addAction(save_action)
 
+        # Creat markers
         self.markers = {}
         self.marker_list = QListWidget()
+        self.marker_list.itemClicked.connect(self.select_marker)
 
         # create back button
         self.back_btn = QPushButton("<<")
@@ -59,8 +62,9 @@ class VideoApp(QWidget):
 
         # create marker buttons
         self.marker_buttons = []
-        for marker in timeline.MARKER_TYPES.keys():
-            button = QPushButton(marker)
+        for marker in Marker.MarkerType:
+            print(f"marker: {marker}")
+            button = QPushButton(marker.value)
             button.clicked.connect(lambda checked=False, n=marker: self.add_marker(n))
             self.marker_buttons.append(button)
 
@@ -160,7 +164,7 @@ class VideoApp(QWidget):
         self.timeline.set_markers(self.markers)
         self.marker_list.clear()
         for t, name in self.markers.items():
-            self.marker_list.addItem(f"{name} at {t/1000:.2f}s")
+            self.marker_list.addItem(Marker(name, round(t/1000, 2)))
     def save(self):
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Save File", "", "JSON Files (*.json);;All Files (*)"
@@ -245,9 +249,9 @@ class VideoApp(QWidget):
         away = 0
         for t, name in self.markers.items():
             if t < pos:
-                if name == "Home point":
+                if name == Marker.MarkerType.HOME_PT:
                     home += 1
-                elif name == "Away point":
+                elif name == Marker.MarkerType.AWAY_PT:
                     away += 1
         self.home_score.setText(str(home))
         self.away_score.setText(str(away))
@@ -261,9 +265,11 @@ class VideoApp(QWidget):
     def add_marker(self, name):
         t = self.player.get_time()
         self.markers[t] = name
-        self.marker_list.addItem(f"{name} at {t/1000:.2f}s")
+        self.marker_list.addItem(Marker(name, round(t/1000, 2)))
 
         self.timeline.set_markers(self.markers)
+    def select_marker(self, item):
+        print(f"Move to marker: {item.text()}")
     def closeEvent(self, event):
         # Show a confirmation dialog
         reply = QMessageBox.question(

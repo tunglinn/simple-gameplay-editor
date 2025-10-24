@@ -1,12 +1,13 @@
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QPainter, QColor
 from PyQt6.QtCore import Qt
+from marker import Marker
 
 MARKER_TYPES = {
-    "Serve": "yellow",
-    "No point": "grey",
-    "Home point": "green",
-    "Away point": "red"
+    Marker.MarkerType.SERVE: "yellow",
+    Marker.MarkerType.NO_PT: "grey",
+    Marker.MarkerType.HOME_PT: "green",
+    Marker.MarkerType.AWAY_PT: "red"
 }
 class TimelineWidget(QWidget):
     def __init__(self, parent=None):
