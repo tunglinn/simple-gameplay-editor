@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QListWidget, QMenuBar, QFileDialog, QMessageBox, QLabel, QLCDNumber
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QListWidget, QMenuBar, QFileDialog, QMessageBox, QLabel, QLCDNumber, QLineEdit
 from PyQt6.QtCore import Qt
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction
@@ -78,10 +78,14 @@ class VideoApp(QWidget):
         main_layout.setMenuBar(menubar)
 
         score_label_layout = QHBoxLayout()
-        home = QLabel("Home")
-        home.setAlignment(Qt.AlignmentFlag.AlignRight)
-        score_label_layout.addWidget(home)
-        score_label_layout.addWidget(QLabel("Away"))
+        self.home = QLineEdit("Home", alignment=Qt.AlignmentFlag.AlignRight)
+        self.home.setFixedWidth(100)
+        score_label_layout.addWidget(QLabel("(Home)", alignment=Qt.AlignmentFlag.AlignRight))
+        score_label_layout.addWidget(self.home)
+        self.away = QLineEdit("Away")
+        self.away.setFixedWidth(100)
+        score_label_layout.addWidget(self.away)
+        score_label_layout.addWidget(QLabel("(Away)"))
 
         score_layout = QHBoxLayout()
         score_layout.addWidget(self.home_score)
@@ -202,7 +206,7 @@ class VideoApp(QWidget):
             elif "Away" in name:
                 away += 1
             # Create text overlay
-            score_text = TextClip(text=f"Home: {home}  Away: {away}", 
+            score_text = TextClip(text=f"{self.home.text()}: {home}  {self.away.text()}: {away}", 
                                   font_size=40, color='white', 
                                   duration=clip.duration,
                                   margin=(10,10), bg_color="black")
