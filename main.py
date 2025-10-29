@@ -6,8 +6,12 @@ from PyQt6.QtGui import QAction
 import vlc
 import timeline
 import json
-from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip
+from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, ImageClip
 from marker import Marker
+from preview_popup import PreviewPopup
+
+DEFAULT_IMPORT="test.mkv"
+DEFAULT_SCOREBOARD="scoreboard_base.png"
 
 class VideoApp(QWidget):
     def __init__(self):
@@ -15,6 +19,8 @@ class VideoApp(QWidget):
         self.setWindowTitle("Embedded Player")
         self.setGeometry(100, 100, 800, 600)
 
+        # TODO: create option to select scoreboard image
+        self.scoreboard_path = DEFAULT_SCOREBOARD
         self.instance = vlc.Instance()
         self.player = self.instance.media_player_new()
 
@@ -71,6 +77,10 @@ class VideoApp(QWidget):
         self.delete_btn = QPushButton("Delete Selected")
         self.delete_btn.clicked.connect(self.delete_selected_markers)
 
+        # create preview button
+        self.preview_btn = QPushButton("Preview")
+        self.preview_btn.clicked.connect(self.show_preview)
+
         # create export button
         self.export_btn = QPushButton("Export")
         self.export_btn.clicked.connect(self.export)
@@ -119,6 +129,7 @@ class VideoApp(QWidget):
         # bottom: marker list
         main_layout.addWidget(self.marker_list, stretch=1)
 
+        main_layout.addWidget(self.preview_btn)
         main_layout.addWidget(self.export_btn)
         
         # Timer to update slider
@@ -126,6 +137,9 @@ class VideoApp(QWidget):
         self.timer.setInterval(100)  # every 100 ms
         self.timer.timeout.connect(self.update_timeline)
         self.timer.start()
+
+        if DEFAULT_IMPORT:
+            self.auto_load()
     
     def open_file_dialog(self):
         # Open file picker dialog
@@ -143,6 +157,12 @@ class VideoApp(QWidget):
         self.set_timeline_and_fps()
         self.toggle_play()
     
+    def auto_load(self):
+        self.video_path=DEFAULT_IMPORT
+        media = self.instance.media_new(self.video_path)
+        self.player.set_media(media)
+        self.set_timeline_and_fps()
+        self.toggle_play()
 
     def toggle_play(self):
         if self.player.is_playing():
@@ -187,7 +207,13 @@ class VideoApp(QWidget):
         current_time = self.player.get_time()  # milliseconds
         seek_time = max(0, current_time - 5000)
         self.player.set_time(seek_time)
-    
+
+    def make_scoreboard_composite(self, video_clip, duration, position=("center", 20)):
+        w, h = video_clip.size
+        overlay = ImageClip(self.scoreboard_path).with_duration(duration).resized(height=h/8).with_position(position)
+        final = CompositeVideoClip([video_clip, overlay])
+        return final
+
     def export(self):
         clip_ranges = []
         current_start = None
@@ -227,7 +253,13 @@ class VideoApp(QWidget):
         final = concatenate_videoclips(subclips)
         final.write_videofile("output.mp4", fps=24, codec='libx264', threads=4)
         video.close()
-    
+
+    def show_preview(self):
+        start = self.player.get_time()/1000
+        video_clip = VideoFileClip(self.video_path).subclipped(start, start+10)
+        popup = PreviewPopup(self.make_scoreboard_composite(video_clip, 10))
+        popup.exec()
+
     def set_timeline_and_fps(self):
         
         self.timeline.set_duration(1)  # default to avoid div by zero

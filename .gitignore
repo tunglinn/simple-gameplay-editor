@@ -3,3 +3,5 @@ test.mkv
 __pycache__
 Saves
 output.mp4
+scoreboard_base.png
+*.pytest_cache
