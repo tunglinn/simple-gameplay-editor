@@ -186,7 +186,8 @@ class VideoApp(QWidget):
 
         with open(file_path, "r", encoding="utf-8") as f:
             loaded = json.load(f, object_hook=self.marker_hook)
-            self.markers = {int(k): v for k, v in loaded.items()}
+            marks = loaded["marks"]
+            self.markers = {int(k): v for k, v in marks.items()}
         print(f"Loaded {len(self.markers)} items from {file_path}")
         self.timeline.set_markers(self.markers)
         self.marker_list.clear()
@@ -198,9 +199,12 @@ class VideoApp(QWidget):
         )
         if not file_path:
             return
-
+        output = {
+            "file": self.video_path,
+            "marks": self.markers
+        }
         with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(self.markers, f, indent=2)
+            json.dump(output, f, indent=2)
         print(f"Saved {len(self.markers)} items to {file_path}")
         
     def back(self):
