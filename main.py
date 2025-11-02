@@ -6,12 +6,13 @@ from PyQt6.QtGui import QAction
 import vlc
 import timeline
 import json
-from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, ImageClip
+from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, ImageClip, ColorClip
 from marker import Marker
 from preview_popup import PreviewPopup
 
 DEFAULT_IMPORT="test.mkv"
 DEFAULT_SCOREBOARD="scoreboard_base.png"
+FONT="fonts/eras-itc-bold.ttf"
 
 class VideoApp(QWidget):
     def __init__(self):
@@ -212,11 +213,53 @@ class VideoApp(QWidget):
         seek_time = max(0, current_time - 5000)
         self.player.set_time(seek_time)
 
-    def make_scoreboard_composite(self, video_clip, duration, position=("center", 20)):
+    
+    def make_scoreboard_composite(self, video_clip, scoreboard_type, position=("center", 20)):
         w, h = video_clip.size
-        overlay = ImageClip(self.scoreboard_path).with_duration(duration).resized(height=h/8).with_position(position)
-        final = CompositeVideoClip([video_clip, overlay])
+        if scoreboard_type=="text":
+            overlay = self.create_text_scoreboard(w, video_clip.duration, 0, 0)
+        else:
+            overlay = [ImageClip(self.scoreboard_path).resized(height=h/8).with_position(position)]
+        final = CompositeVideoClip([video_clip] + overlay)
         return final
+
+    def create_text_scoreboard(self, width, duration, home, away):
+        # Create text overlay
+        # Define common parameters
+        font_size = 60
+        color = 'white'
+        bg_color = 'black'
+        print(f'duration: {duration}')
+        # Individual text clips
+        team1_clip = TextClip(text=self.home.text(), font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), text_align="right", horizontal_align="right")
+        team2_clip = TextClip(text=self.away.text(), font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), text_align="left", horizontal_align="left")
+        score_clip = TextClip(text=f"{home}:{away}", font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), text_align="center")
+        
+        # Create background color
+        bar_height = 60
+        bar = ColorClip(size=(width, bar_height), color=(0, 0, 0), duration=duration)
+
+        # Get widths to align around center
+        w_team1, h = team1_clip.size
+        w_score, _ = score_clip.size
+        w_team2, _ = team2_clip.size
+
+        # Horizontal spacing (adjust as needed)
+        gap = 30
+
+        # Position so that the score (with colon) is centered horizontally
+        team1_x = width/2 - (w_score/2 + gap + w_team1)
+        score_x = width/2 - w_score/2
+        team2_x = width/2 + (w_score/2 + gap)
+        # Vertically near the top
+        y_pos = 0
+
+        # Create positioned clips
+        team1_clip = team1_clip.with_position((team1_x, y_pos))
+        score_clip = score_clip.with_position((score_x, y_pos))
+        team2_clip = team2_clip.with_position((team2_x, y_pos))
+        bar = bar.with_position((0, y_pos+20))
+        return [bar, team1_clip, team2_clip, score_clip]
 
     def export(self):
         clip_ranges = []
@@ -245,15 +288,12 @@ class VideoApp(QWidget):
                 home += 1
             elif "Away" in name:
                 away += 1
-            # Create text overlay
-            score_text = TextClip(text=f"{self.home.text()}: {home}  {self.away.text()}: {away}", 
-                                  font_size=40, color='white', 
-                                  duration=clip.duration,
-                                  margin=(10,10), bg_color="black")
-            score_text = score_text.with_position(("center", "top"))
-            # Combine the video and text
-            annotated_clip = CompositeVideoClip([clip, score_text])
-            subclips.append(annotated_clip)
+            
+
+            # Combine all
+            scoreboard = CompositeVideoClip([clip, team1_clip, score_clip, team2_clip])
+
+            subclips.append(scoreboard)
         final = concatenate_videoclips(subclips)
         final.write_videofile("output.mp4", fps=24, codec='libx264', threads=4)
         video.close()
@@ -261,7 +301,7 @@ class VideoApp(QWidget):
     def show_preview(self):
         start = self.player.get_time()/1000
         video_clip = VideoFileClip(self.video_path).subclipped(start, start+10)
-        popup = PreviewPopup(self.make_scoreboard_composite(video_clip, 10))
+        popup = PreviewPopup(self.make_scoreboard_composite(video_clip, "text", 10))
         popup.exec()
 
     def set_timeline_and_fps(self):
