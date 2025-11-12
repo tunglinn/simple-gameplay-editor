@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QWidget, QListWidget
 from PyQt6.QtGui import QPainter, QColor
 from PyQt6.QtCore import Qt
 from marker import Marker
@@ -14,7 +14,7 @@ class TimelineWidget(QWidget):
         super().__init__(parent)
         self.position = 0      # Current playback position in ms
         self.duration = 1      # Video duration in ms
-        self.markers = {}      # List of marker times in ms
+        self.markers =[]       # list of Marker objects
 
         self.setMinimumHeight(30)  # Visible height for timeline
 
@@ -45,7 +45,9 @@ class TimelineWidget(QWidget):
         painter.drawLine(x_pos, 0, x_pos, h)
 
         # Draw markers
-        for t, name in self.markers.items():
+        for marker in self.markers:
+            name = marker.marker_type
+            t = marker.timestamp
             painter.setBrush(QColor(MARKER_TYPES[name]))
             x = int((t / self.duration) * w)
             painter.drawRect(x-1, 0, 2, h)

@@ -55,7 +55,7 @@ class VideoApp(QWidget):
         file_menu.addAction(save_action)
 
         # Creat markers
-        self.markers = {}
+        self.markers = []
         self.marker_list = QListWidget()
         self.marker_list.itemClicked.connect(self.select_marker)
 
@@ -170,11 +170,7 @@ class VideoApp(QWidget):
             self.player.pause()
         else:
             self.player.play()
-    def marker_hook(self, obj):
-        for k, v in obj.items():
-            if isinstance(v, str) and v in Marker.MarkerType._value2member_map_:
-                obj[k] = Marker.MarkerType(v)
-        return obj
+    
     def load_markers(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -185,29 +181,39 @@ class VideoApp(QWidget):
         if not file_path:
             return
 
+        self.markers = []
+        self.marker_list.clear()
         with open(file_path, "r", encoding="utf-8") as f:
-            loaded = json.load(f, object_hook=self.marker_hook)
+            loaded = json.load(f)
             marks = loaded["marks"]
-            self.markers = {int(k): v for k, v in marks.items()}
+            for mark in marks:
+                marker_obj = Marker(Marker.MarkerType(mark["label"]),mark["time"])
+                self.markers.append(marker_obj)
+                self.marker_list.addItem(marker_obj)
         print(f"Loaded {len(self.markers)} items from {file_path}")
         self.timeline.set_markers(self.markers)
-        self.marker_list.clear()
-        for t, name in self.markers.items():
-            self.marker_list.addItem(Marker(name, t))
     def save(self):
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Save File", "", "JSON Files (*.json);;All Files (*)"
         )
         if not file_path:
             return
+        formatted_markers = self.format_markers()
         output = {
             "file": self.video_path,
-            "marks": self.markers
+            "marks": formatted_markers
         }
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2)
         print(f"Saved {len(self.markers)} items to {file_path}")
-        
+    def format_markers(self):
+        output = []
+        for marker in self.markers:
+            output.append({
+                "time": marker.timestamp,
+                "label": marker.marker_type
+            })
+        return output
     def back(self):
         current_time = self.player.get_time()  # milliseconds
         seek_time = max(0, current_time - 5000)
@@ -229,10 +235,10 @@ class VideoApp(QWidget):
         font_size = 60
         color = 'white'
         bg_color = 'black'
-        print(f'duration: {duration}')
+        print(f'duration: {duration} score: {home}:{away}')
         # Individual text clips
-        team1_clip = TextClip(text=self.home.text(), font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), text_align="right", horizontal_align="right")
-        team2_clip = TextClip(text=self.away.text(), font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), text_align="left", horizontal_align="left")
+        team1_clip = TextClip(text=self.home.text(), font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), horizontal_align="right")
+        team2_clip = TextClip(text=self.away.text(), font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), horizontal_align="left")
         score_clip = TextClip(text=f"{home}:{away}", font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), text_align="center")
         
         # Create background color
@@ -264,9 +270,11 @@ class VideoApp(QWidget):
     def export(self):
         clip_ranges = []
         current_start = None
-        for t, name in sorted(self.markers.items()):
-            t = round(t/1000, 1)
-            if name == "Serve":
+        
+        for marker in sorted(self.markers):
+            t = round(marker.timestamp/1000, 1)
+            name = marker.marker_type
+            if name == Marker.MarkerType.SERVE:
                 current_start = t
             else:
                 if current_start: 
@@ -284,17 +292,19 @@ class VideoApp(QWidget):
         away = 0
         for start, end, name in clip_ranges:
             clip = video.subclipped(start, end)
-            if "Home" in name:
-                home += 1
-            elif "Away" in name:
-                away += 1
+            print(f"Name: {name}")
             
-
+            w, h = clip.size
             # Combine all
-            scoreboard = CompositeVideoClip([clip, team1_clip, score_clip, team2_clip])
+            scoreboard = CompositeVideoClip([clip]+ self.create_text_scoreboard(w, clip.duration, home, away))
 
             subclips.append(scoreboard)
+            if name == Marker.MarkerType.HOME_PT:
+                home += 1
+            elif name == Marker.MarkerType.AWAY_PT:
+                away += 1
         final = concatenate_videoclips(subclips)
+        # TODO: open file dialog
         final.write_videofile("output.mp4", fps=24, codec='libx264', threads=4)
         video.close()
 
@@ -329,7 +339,9 @@ class VideoApp(QWidget):
         pos = self.player.get_time()
         home = 0
         away = 0
-        for t, name in self.markers.items():
+        for marker in self.markers:
+            t = marker.timestamp
+            name = marker.marker_type
             if t < pos:
                 if name == Marker.MarkerType.HOME_PT:
                     home += 1
@@ -346,12 +358,15 @@ class VideoApp(QWidget):
             print("Error setting position:", e)
     def add_marker(self, name):
         t = self.player.get_time()
-        self.markers[t] = name
-        self.marker_list.addItem(Marker(name, t))
+        new_marker = Marker(name, t)
+        self.markers.append(new_marker)
+        # insert into marker_list based on t
+        self.marker_list.insertItem(sorted(self.markers).index(new_marker), new_marker)
 
         self.timeline.set_markers(self.markers)
     def select_marker(self, marker):
         print(f"Move to marker: {marker.text()}")
+        print(f"marker.timestamp: {marker.timestamp} ({type(marker.timestamp)})")
         self.player.set_time(marker.timestamp)
     
     def delete_selected_markers(self):
@@ -360,10 +375,10 @@ class VideoApp(QWidget):
         if not selected_markers:
             print("No markers selected to delete.")
             return
-
         for marker in selected_markers:
             row = self.marker_list.row(marker)
             self.marker_list.takeItem(row)
+            self.markers.remove(marker)
             del marker
 
     def closeEvent(self, event):
