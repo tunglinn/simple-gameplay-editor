@@ -14,4 +14,9 @@ class Marker(QListWidgetItem):
     def __str__(self):
         return f"{round(self.timestamp/1000, 2)} - {self.marker_type.value}"
     def __lt__(self, other):
-        return self.timestamp < other.timestamp
+        # First compare timestamps
+        if self.timestamp != other.timestamp:
+            return self.timestamp < other.timestamp
+
+        # If timestamps are equal, compare MarkerType values
+        return self.marker_type.value < other.marker_type.value
