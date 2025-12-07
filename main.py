@@ -1,5 +1,5 @@
-import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QListWidget, QMenuBar, QFileDialog, QMessageBox, QLabel, QLCDNumber, QLineEdit
+import sys, os
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QListWidget, QMenuBar, QFileDialog, QMessageBox, QLabel, QLCDNumber, QLineEdit, QCheckBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction
@@ -86,6 +86,12 @@ class VideoApp(QWidget):
         self.export_btn = QPushButton("Export")
         self.export_btn.clicked.connect(self.export)
 
+        # create add score check mark
+        self.add_score_check = QCheckBox("Add Scoreboard")
+        self.add_score_check.setChecked(True)
+        self.audio_check = QCheckBox("With audio")
+        self.audio_check.setChecked(True)
+
         # create score tracker
         self.home_score = QLabel("0")
         self.home_score.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -131,6 +137,8 @@ class VideoApp(QWidget):
         main_layout.addWidget(self.marker_list, stretch=1)
 
         main_layout.addWidget(self.preview_btn)
+        main_layout.addWidget(self.add_score_check)
+        main_layout.addWidget(self.audio_check)
         main_layout.addWidget(self.export_btn)
         
         # Timer to update slider
@@ -157,6 +165,12 @@ class VideoApp(QWidget):
         self.player.set_media(media)
         self.set_timeline_and_fps()
         self.toggle_play()
+        dirname = os.path.dirname(self.video_path)
+        stem = os.path.splitext(os.path.basename(self.video_path))[0]
+
+        marks_path = os.path.join(dirname, f"{stem}_marks.json")
+        print(f"Attempting to find markers at {marks_path}")
+        self.load_markers(marks_path)
     
     def auto_load(self):
         self.video_path=DEFAULT_IMPORT
@@ -171,13 +185,14 @@ class VideoApp(QWidget):
         else:
             self.player.play()
     
-    def load_markers(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load File",
-            "",
-            "JSON Files (*.json);;All Files (*)"
-        )
+    def load_markers(self, file_path=None):
+        if not file_path:
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Load File",
+                "",
+                "JSON Files (*.json);;All Files (*)"
+            )
         if not file_path:
             return
 
@@ -234,7 +249,6 @@ class VideoApp(QWidget):
         # Define common parameters
         font_size = 60
         color = 'white'
-        bg_color = 'black'
         print(f'duration: {duration} score: {home}:{away}')
         # Individual text clips
         team1_clip = TextClip(text=self.home.text(), font=FONT, font_size=font_size, color=color, duration=duration, method="caption", size=(600, font_size+20), horizontal_align="right")
@@ -243,7 +257,8 @@ class VideoApp(QWidget):
         
         # Create background color
         bar_height = 60
-        bar = ColorClip(size=(width, bar_height), color=(0, 0, 0), duration=duration)
+        bar = ColorClip(size=(width, bar_height), color=(0, 0, 0), duration=duration).with_opacity(0.5)
+        
 
         # Get widths to align around center
         w_team1, h = team1_clip.size
@@ -268,35 +283,61 @@ class VideoApp(QWidget):
         return [bar, team1_clip, team2_clip, score_clip]
 
     def export(self):
+        print("\n\n\nStarting export...")
+        add_score=self.add_score_check.isChecked()
         clip_ranges = []
         current_start = None
         
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save video as...",
+            "output.mp4",               # default filename
+            "MP4 Files (*.mp4);;All Files (*)"
+        )
+
+        if not output_path:
+            print("Stop export: no output path")
+            return
+        
+        found_first_serve=False
+        home = 0
+        away = 0
         for marker in sorted(self.markers):
             t = round(marker.timestamp/1000, 1)
             name = marker.marker_type
-            if name == Marker.MarkerType.SERVE:
-                current_start = t
+            # get score before first serve (in case starts recording after 0-0)
+            if not found_first_serve:
+                if name == Marker.MarkerType.HOME_PT:
+                    home += 1
+                elif name == Marker.MarkerType.AWAY_PT:
+                    away += 1
+                elif name == Marker.MarkerType.SERVE:
+                    found_first_serve = True
+                    current_start = t
             else:
-                if current_start: 
-                    clip_ranges.append((current_start, t, name))
-                    current_start = None
+                if name == Marker.MarkerType.SERVE:
+                    current_start = t
                 else:
-                    print(f"{name} at timestamp {t} doesn't have start serve.")
-                    return
+                    if current_start: 
+                        print(f"Appending: {current_start}, {t}, {name} ")
+                        clip_ranges.append((current_start, t, name))
+                        current_start = None
+                    else:
+                        print(f"{name} at timestamp {t} doesn't have start serve.")
+                        return
 
         
-        video = VideoFileClip(self.video_path)
+        video = VideoFileClip(self.video_path, audio=self.audio_check.isChecked())
+        video = video.resized((1920,1080))
         print(f'subclips: {clip_ranges}')
         subclips = []
-        home = 0
-        away = 0
         for start, end, name in clip_ranges:
             clip = video.subclipped(start, end)
             print(f"Name: {name}")
             
             w, h = clip.size
             # Combine all
-            scoreboard = CompositeVideoClip([clip]+ self.create_text_scoreboard(w, clip.duration, home, away))
+            scoreboard = CompositeVideoClip([clip]+ self.create_text_scoreboard(w, clip.duration, home, away)) if add_score else clip
 
             subclips.append(scoreboard)
             if name == Marker.MarkerType.HOME_PT:
@@ -304,13 +345,16 @@ class VideoApp(QWidget):
             elif name == Marker.MarkerType.AWAY_PT:
                 away += 1
         final = concatenate_videoclips(subclips)
-        # TODO: open file dialog
-        final.write_videofile("output.mp4", fps=24, codec='libx264', threads=4)
+
+        final.write_videofile(output_path, fps=30, codec='libx264', threads=4)
         video.close()
 
     def show_preview(self):
         start = self.player.get_time()/1000
-        video_clip = VideoFileClip(self.video_path).subclipped(start, start+10)
+        video_clip = VideoFileClip(self.video_path, audio=self.audio_check.isChecked()
+                                   )
+        video_clip = video_clip.resized((1920,1080))
+        video_clip = video_clip.subclipped(start, start+10)
         popup = PreviewPopup(self.make_scoreboard_composite(video_clip, "text", 10))
         popup.exec()
 
