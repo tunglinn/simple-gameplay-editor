@@ -1,7 +1,6 @@
 import sys, os
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QListWidget, QMenuBar, QFileDialog, QMessageBox, QLabel, QLCDNumber, QLineEdit, QCheckBox
-from PyQt6.QtCore import Qt
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QFileInfo
 from PyQt6.QtGui import QAction
 import vlc
 import timeline
@@ -9,6 +8,7 @@ import json
 from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, ImageClip, ColorClip
 from marker import Marker
 from preview_popup import PreviewPopup
+from auto_upload import get_authenticated_service, upload_video
 
 DEFAULT_IMPORT="test.mkv"
 DEFAULT_SCOREBOARD="scoreboard_base.png"
@@ -160,6 +160,10 @@ class VideoApp(QWidget):
         )
         if self.video_path:
             print("Selected file:", self.video_path)
+            file_info = QFileInfo(self.video_path)
+            date_format = "MMMdd"
+            self.creation_time = file_info.lastModified().toString(date_format).lower()
+            print(f"File created on {self.creation_time}")
         
         media = self.instance.media_new(self.video_path)
         self.player.set_media(media)
@@ -283,21 +287,14 @@ class VideoApp(QWidget):
         return [bar, team1_clip, team2_clip, score_clip]
 
     def export(self):
+        get_authenticated_service()
         print("\n\n\nStarting export...")
         add_score=self.add_score_check.isChecked()
         clip_ranges = []
         current_start = None
         
-        output_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save video as...",
-            "output.mp4",               # default filename
-            "MP4 Files (*.mp4);;All Files (*)"
-        )
-
-        if not output_path:
-            print("Stop export: no output path")
-            return
+        output_path = f"{self.creation_time}-{self.home.text().replace("/","_")}-{self.away.text().replace("/","_")}.mp4"
+        print(f"Exporting to {output_path}")
         
         found_first_serve=False
         home = 0
@@ -348,6 +345,8 @@ class VideoApp(QWidget):
 
         final.write_videofile(output_path, fps=30, codec='libx264', threads=4)
         video.close()
+
+        upload_video(output_path)
 
     def show_preview(self):
         start = self.player.get_time()/1000
